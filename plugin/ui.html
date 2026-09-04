@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  :root {
+    --bg: #2c2c2c;
+    --field: #1e1e1e;
+    --line: #555;
+    --ink: #eee;
+    --accent: #EB5757;
+    --accent-hover: #D64545;
+    --ok: #0fa958;
+    --err: #d32f2f;
+    --busy: #e8a317;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font: 13px system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    overflow: hidden;
+  }
+
+  /* ── status bar ── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 8px;
+    color: #fff;
+    font-weight: 600;
+    line-height: 1;
+    background: var(--busy);
+    transition: background 150ms ease;
+  }
+  .topbar[data-state="ok"]  { background: var(--ok); }
+  .topbar[data-state="err"] { background: var(--err); }
+
+  .topbar .glyph { display: flex; font-size: 16px; flex: none; }
+  .topbar .glyph svg { display: block; }
+  .topbar[data-state="pending"] .glyph { animation: turn 1.1s linear infinite; }
+  @keyframes turn { to { transform: rotate(360deg); } }
+
+  .topbar .label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .topbar .gear {
+    flex: none;
+    border: 0;
+    background: none;
+    color: inherit;
+    font-size: 14px;
+    padding: 2px;
+    line-height: 1;
+    opacity: .75;
+    cursor: pointer;
+  }
+  .topbar .gear:hover { opacity: 1; }
+
+  /* ── panels ── */
+  .view { display: none; padding: 10px 8px 12px; color: var(--ink); }
+  .view.active { display: block; }
+
+  .view label { display: block; font-size: 11px; opacity: .7; margin: 8px 0 3px; }
+  .view label:first-child { margin-top: 0; }
+  .view input {
+    width: 100%;
+    padding: 5px 6px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--field);
+    color: var(--ink);
+    font: inherit;
+    font-size: 12px;
+  }
+  .view input:focus { outline: none; border-color: var(--accent); }
+
+  .action {
+    display: block;
+    width: 100%;
+    margin-top: 10px;
+    padding: 6px;
+    border: 0;
+    border-radius: 4px;
+    background: var(--accent);
+    color: #fff;
+    font-weight: 600;
+    font-size: 12px;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .action:hover { background: var(--accent-hover); }
+  .action.secondary { background: #444; }
+  .action.secondary:hover { background: #555; }
+
+  #view_pair { text-align: center; }
+  #pair_code {
+    margin: 4px 0 2px;
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: 4px;
+  }
+  #view_pair .hint { margin-top: 8px; font-size: 11px; opacity: .65; line-height: 1.4; }
+</style>
+</head>
+<body>
+  <div class="topbar" data-state="pending" id="topbar">
+    <span class="glyph" id="glyph"></span>
+    <span class="label" id="label">Loading…</span>
+    <button class="gear" id="gear" title="Server &amp; token settings">&#9881;</button>
+  </div>
+
+  <div class="view" id="view_settings">
+    <label>Server — empty for local dev (wrangler dev)</label>
+    <input id="field_server" placeholder="https://figmate.example.workers.dev" spellcheck="false">
+    <label>Token — filled automatically by Authorize</label>
+    <input id="field_token" type="password" placeholder="your personal token" spellcheck="false">
+    <button class="action" id="save">Save &amp; connect</button>
+    <button class="action secondary" id="copy_cli">Copy CLI setup</button>
+  </div>
+
+  <div class="view" id="view_pair">
+    <div id="pair_code">--- ---</div>
+    <a class="action" id="authorize" target="_blank" href="#">Authorize</a>
+    <div class="hint">The page opens in your browser with everything<br>filled in — just enter your name.</div>
+  </div>
+
+<script>
+// Status glyphs: Solar icon set by 480 Design — CC BY 4.0
+// https://www.figma.com/community/file/1166831539721848736
+const GLYPHS = {
+  ok: `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12ZM16.0303 8.96967C16.3232 9.26256 16.3232 9.73744 16.0303 10.0303L11.0303 15.0303C10.7374 15.3232 10.2626 15.3232 9.96967 15.0303L7.96967 13.0303C7.67678 12.7374 7.67678 12.2626 7.96967 11.9697C8.26256 11.6768 8.73744 11.6768 9.03033 11.9697L10.5 13.4393L12.7348 11.2045L14.9697 8.96967C15.2626 8.67678 15.7374 8.67678 16.0303 8.96967Z" clip-rule="evenodd"/></svg>`,
+  err: `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22C17.5228 22 22 17.5228 22 12ZM12 6.25C12.4142 6.25 12.75 6.58579 12.75 7V13C12.75 13.4142 12.4142 13.75 12 13.75C11.5858 13.75 11.25 13.4142 11.25 13V7C11.25 6.58579 11.5858 6.25 12 6.25ZM12 17C12.5523 17 13 16.5523 13 16C13 15.4477 12.5523 15 12 15C11.4477 15 11 15.4477 11 16C11 16.5523 11.4477 17 12 17Z" clip-rule="evenodd"/></svg>`,
+  pending: `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22ZM15.9346 5.59158C16.217 5.70662 16.4017 5.98121 16.4017 6.28616V9.00067C16.4017 9.41489 16.0659 9.75067 15.6517 9.75067H13C12.6983 9.75067 12.4259 9.56984 12.3088 9.29174C12.1917 9.01364 12.2527 8.69245 12.4635 8.47659L13.225 7.69705C11.7795 7.25143 10.1467 7.61303 9.00097 8.78596C7.33301 10.4935 7.33301 13.269 9.00097 14.9765C10.6593 16.6742 13.3407 16.6742 14.999 14.9765C15.6769 14.2826 16.0805 13.4112 16.2069 12.5045C16.2651 12.0865 16.5972 11.7349 17.0192 11.7349C17.4246 11.7349 17.7609 12.0595 17.7217 12.463C17.5957 13.7606 17.0471 15.0265 16.072 16.0247C13.8252 18.3248 10.1748 18.3248 7.92796 16.0247C5.69068 13.7344 5.69068 10.0281 7.92796 7.7378C9.66551 5.95905 12.244 5.55465 14.3647 6.53037L15.1152 5.76208C15.3283 5.54393 15.6522 5.47653 15.9346 5.59158Z" clip-rule="evenodd"/></svg>`,
+};
+
+// Team defaults. INVITE_CODE stays empty in the repository — the build that
+// gets distributed to teammates has it injected, so their authorize page
+// opens pre-filled and they only type a name.
+const DEFAULT_SERVER = "wss://figmate.rainoldweb.workers.dev";
+const INVITE_CODE = "";
+
+const VIEW_SIZES = {
+  bar: { w: 240, h: 32 },
+  settings: { w: 260, h: 230 },
+  pair: { w: 260, h: 160 },
+};
+
+const el = (id) => document.getElementById(id);
+
+// ── plugin main-thread bridge ──
+function toPlugin(message) {
+  parent.postMessage({ pluginMessage: message }, "*");
+}
+
+function debug(line) {
+  console.log("[figmate] " + line);
+}
+
+// ── view state ──
+let currentView = "bar";
+
+function setStatus(text, state) {
+  el("label").textContent = text;
+  el("glyph").innerHTML = GLYPHS[state] || GLYPHS.err;
+  el("topbar").dataset.state = state;
+}
+
+function setView(name) {
+  currentView = name;
+  el("view_settings").className = "view" + (name === "settings" ? " active" : "");
+  el("view_pair").className = "view" + (name === "pair" ? " active" : "");
+  const size = VIEW_SIZES[name] || VIEW_SIZES.bar;
+  toPlugin({ type: "ui-size", w: size.w, h: size.h });
+}
+
+// ── server address normalization ──
+// Teammates paste anything: https://host, wss://host, a bare hostname,
+// trailing slashes. Normalize to a ws(s) base once, derive http(s) from it.
+function wsBase() {
+  let base = ((config && config.server) || DEFAULT_SERVER).trim().replace(/\/+$/, "");
+  base = base.replace(/^https:/, "wss:").replace(/^http:/, "ws:");
+  if (!/^wss?:\/\//.test(base)) {
+    base = (/^(localhost|127\.)/.test(base) ? "ws://" : "wss://") + base;
+  }
+  return base;
+}
+
+function httpBase() {
+  return wsBase().replace(/^wss:/, "https:").replace(/^ws:/, "http:");
+}
+
+// ── websocket to the bridge/worker ──
+let config = null;          // {server, token} — arrives from clientStorage
+let socket = null;
+let retryTimer = null;
+let droppedBadToken = false;
+
+function connect() {
+  clearTimeout(retryTimer);
+  setStatus("Connecting…", "pending");
+
+  const token = (config && config.token) || "";
+  const url = wsBase() + "/plugin" + (token ? "?token=" + encodeURIComponent(token) : "");
+  try {
+    socket = new WebSocket(url);
+  } catch (err) {
+    debug("[ws] open failed: " + err.message);
+    retryTimer = setTimeout(connect, 2000);
+    return;
+  }
+
+  socket.onopen = () => {
+    // A tokenless connection may still be flipped into pairing mode by the
+    // worker — its "pair" message arrives right after open.
+    setStatus("Connected", "ok");
+    debug("[ws] connected");
+    try { socket.send(JSON.stringify({ type: "hello", version: "3.0" })); } catch (err) {}
+  };
+
+  socket.onmessage = (event) => {
+    let msg;
+    try { msg = JSON.parse(event.data); } catch (err) {
+      debug("[ws] unparseable message: " + err.message);
+      return;
+    }
+
+    switch (msg.type) {
+      case "exec":
+        debug("[exec] " + String(msg.id).slice(0, 8) + " code=" + (msg.code || "").length + "b");
+        toPlugin({ type: "exec", id: msg.id, code: msg.code });
+        break;
+      case "ping":
+        // Liveness probe from the server when another plugin instance wants
+        // this slot — answering keeps it ours.
+        try { socket.send(JSON.stringify({ type: "pong" })); } catch (err) {}
+        break;
+      case "pair":
+        // Multi-user server, no token yet: show the pairing code and the
+        // button that opens the authorization page (code + invite in the URL).
+        debug("[pair] code " + msg.code);
+        setStatus("Authorize needed", "pending");
+        el("pair_code").textContent = String(msg.code).replace(/^(\d{3})(\d{3})$/, "$1 $2");
+        el("authorize").href = httpBase() + "/authorize?code=" + encodeURIComponent(msg.code)
+          + (INVITE_CODE ? "&invite=" + encodeURIComponent(INVITE_CODE) : "");
+        setView("pair");
+        break;
+      case "token":
+        // The authorization page delivered a personal token — persist it;
+        // code.js answers with a fresh "config", which reconnects us.
+        debug("[pair] token received" + (msg.name ? " for " + msg.name : ""));
+        setStatus("Authorizing…", "pending");
+        setView("bar");
+        droppedBadToken = false;
+        toPlugin({ type: "set-config", server: (config && config.server) || "", token: msg.token });
+        break;
+      default:
+        break;
+    }
+  };
+
+  socket.onerror = () => {
+    setStatus("Error", "err");
+    debug("[ws] error");
+  };
+
+  socket.onclose = (event) => {
+    if (event && event.code === 4401) {
+      if (config && config.token && !droppedBadToken) {
+        // Stored token revoked or unknown here: drop it once and reconnect
+        // bare — a worker will offer pairing, a plain bridge lands below.
+        droppedBadToken = true;
+        debug("[ws] token rejected — dropping it and re-pairing");
+        toPlugin({ type: "set-config", server: config.server, token: "" });
+        return;
+      }
+      setStatus("Not authorized", "err");
+      debug("[ws] rejected: no valid token");
+      setView("settings");
+      return;
+    }
+    if (event && event.code === 1008) {
+      // The slot is held by a live plugin — usually this file open in a second
+      // Figma window. A 2s retry loop would spam both sides.
+      setStatus("Slot busy", "err");
+      debug("[ws] rejected: slot held by another plugin instance");
+      retryTimer = setTimeout(connect, 15000);
+      return;
+    }
+    setStatus(currentView === "pair" ? "Authorize needed" : "Reconnecting…", "pending");
+    debug("[ws] disconnected");
+    retryTimer = setTimeout(connect, 2000);
+  };
+}
+
+function reconnect() {
+  clearTimeout(retryTimer);
+  if (socket) {
+    // Neuter the old socket so its onclose can't schedule a rival retry.
+    socket.onclose = null;
+    socket.onerror = null;
+    try { socket.close(); } catch (err) {}
+    socket = null;
+  }
+  connect();
+}
+
+// ── messages from code.js ──
+window.onmessage = (event) => {
+  const msg = event.data && event.data.pluginMessage;
+  if (!msg) return;
+
+  if (msg.type === "config") {
+    config = { server: msg.server || "", token: msg.token || "" };
+    el("field_server").value = config.server;
+    el("field_token").value = config.token;
+    if (config.token) droppedBadToken = false;
+    reconnect();
+    return;
+  }
+
+  // result / error / log flow straight through to the server.
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    debug("[drop] ws not open, " + msg.type + " id=" + String(msg.id).slice(0, 8));
+    return;
+  }
+  try {
+    socket.send(JSON.stringify(msg));
+  } catch (err) {
+    debug("[send] failed: " + err.message);
+    return;
+  }
+  if (msg.type === "result") debug("[ok]  " + String(msg.id).slice(0, 8));
+  else if (msg.type === "error") debug("[err] " + String(msg.id).slice(0, 8) + " " + msg.text);
+};
+
+// ── controls ──
+el("gear").onclick = () => {
+  setView(currentView === "settings" ? "bar" : "settings");
+};
+
+el("save").onclick = () => {
+  setView("bar");
+  setStatus("Saving…", "pending");
+  droppedBadToken = false;
+  toPlugin({
+    type: "set-config",
+    server: el("field_server").value.trim(),
+    token: el("field_token").value.trim(),
+  });
+  // code.js answers with a fresh "config" message, which reconnects.
+};
+
+el("copy_cli").onclick = (event) => {
+  const snippet = "export FIGMATE_SERVER=" + httpBase() + "\n"
+    + "export FIGMATE_TOKEN=" + (((config && config.token) || el("field_token").value.trim()) || "<your token>");
+  const button = event.target;
+  const flash = (text) => {
+    button.textContent = text;
+    setTimeout(() => { button.textContent = "Copy CLI setup"; }, 1500);
+  };
+  // The plugin iframe doesn't always expose the async clipboard API —
+  // fall back to the selection-based one.
+  const fallback = () => {
+    const area = document.createElement("textarea");
+    area.value = snippet;
+    document.body.appendChild(area);
+    area.select();
+    const copied = document.execCommand("copy");
+    document.body.removeChild(area);
+    flash(copied ? "Copied!" : "Copy failed");
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(snippet).then(() => flash("Copied!"), fallback);
+  } else {
+    fallback();
+  }
+};
+
+setStatus("Loading…", "pending");
+toPlugin({ type: "get-config" });
+</script>
+</body>
+</html>

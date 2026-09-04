@@ -1,0 +1,32 @@
+# Figmate on Cloudflare Workers.
+#
+#   cd worker
+#   npx wrangler login
+#   npx wrangler secret put INVITE_CODE   # the one shared team secret
+#   npx wrangler deploy
+#
+# The deploy prints the public URL (https://figmate.<account>.workers.dev).
+# Put that URL into plugin/manifest.json allowedDomains and into the plugin's
+# server field (or bake it as the default) before distributing the plugin.
+#
+# Local development: echo 'INVITE_CODE=dev-invite' > .dev.vars && npx wrangler dev
+
+name = "figmate"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+# Dashboard-set variables and secrets survive wrangler deploys; without this
+# every git build wipes INVITE_CODE if it was added as a plaintext variable.
+keep_vars = true
+
+[[durable_objects.bindings]]
+name = "SLOT"
+class_name = "Slot"
+
+[[durable_objects.bindings]]
+name = "LOBBY"
+class_name = "Lobby"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Slot", "Lobby"]

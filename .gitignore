@@ -1,0 +1,18 @@
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Machine-specific instructions
+CLAUDE.local.md
+
+# Local MCP config
+.mcp.json
+
+# Build artifacts (the distributed zip carries the team invite code)
+figmate-plugin.zip
+
+# Python tooling for the worker e2e tests
+venv/
+__pycache__/
+*.pyc

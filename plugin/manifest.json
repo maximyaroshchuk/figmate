@@ -1,0 +1,20 @@
+{
+  "name": "Figmate Bridge",
+  "id": "figmate-bridge-dev",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": ["figma", "figjam"],
+  "permissions": ["teamlibrary", "activeusers", "fileusers", "currentuser"],
+  "networkAccess": {
+    "allowedDomains": [
+      "http://localhost:8787",
+      "ws://localhost:8787",
+      "https://figmate.rainoldweb.workers.dev",
+      "wss://figmate.rainoldweb.workers.dev",
+      "https://figmate.example.com",
+      "wss://figmate.example.com"
+    ],
+    "reasoning": "Talks to the Figmate bridge server (local, or the team's own server) that relays commands from the CLI."
+  }
+}
