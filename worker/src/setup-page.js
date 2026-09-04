@@ -359,7 +359,7 @@ export const SETUP_PAGE = `<!DOCTYPE html>
         <h2>Дайте токен своєму Claude Code</h2>
         <span class="once">один раз</span>
       </div>
-      <p>Та сама сторінка авторизації покаже готовий блок з <code>FIGMATE_SERVER</code> і <code>FIGMATE_TOKEN</code>. Додайте ці значення в <code>~/.claude/settings.json</code>:</p>
+      <p>Та сама сторінка авторизації покаже готовий JSON з <code>FIGMATE_SERVER</code> і <code>FIGMATE_TOKEN</code>. Вставте його в <code>splynx/.claude/settings.local.json</code> (він gitignored):</p>
       <div class="codeblock">
         <pre>{
   <span class="cm">"env"</span>: {
@@ -369,7 +369,7 @@ export const SETUP_PAGE = `<!DOCTYPE html>
 }</pre>
         <button class="copy" type="button">Copy</button>
       </div>
-      <p>Альтернатива — тільки для одного проєкту: той самий блок у <code>&lt;проєкт&gt;/.claude/settings.local.json</code> (він gitignored).</p>
+      <p>Альтернатива — глобально для всіх проєктів: той самий блок у <code>~/.claude/settings.json</code>.</p>
     </div>
 
     <div class="step">

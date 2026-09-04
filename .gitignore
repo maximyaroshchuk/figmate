@@ -9,6 +9,9 @@ CLAUDE.local.md
 # Local MCP config
 .mcp.json
 
+# Local Claude settings (holds the team invite code)
+.claude/settings.local.json
+
 # Build artifacts (the distributed zip carries the team invite code)
 figmate-plugin.zip
 

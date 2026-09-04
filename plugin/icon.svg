@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <rect width="128" height="128" rx="28" fill="#EB5757"/>
+  <text x="46" y="88" font-family="-apple-system, 'Segoe UI', sans-serif" font-size="72" font-weight="800" fill="#ffffff" text-anchor="middle">F</text>
+  <text x="94" y="86" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="34" font-weight="700" fill="#ffffff" text-anchor="middle">&lt;/&gt;</text>
+</svg>

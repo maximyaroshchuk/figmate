@@ -6,7 +6,11 @@
 // messages flow back out. Persisted server/token config lives here too, since
 // clientStorage is only reachable from the main thread.
 
-figma.showUI(__html__, { width: 240, height: 32, title: "Figmate Bridge" });
+// Shown in the plugin window title so a running build is identifiable at a
+// glance. Bump on every distributed build.
+const VERSION = "2.0";
+
+figma.showUI(__html__, { width: 240, height: 32, title: "Figmate Bridge v" + VERSION });
 
 const STORAGE_KEY = "figmate.config";
 

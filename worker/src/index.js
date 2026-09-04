@@ -543,7 +543,7 @@ function authorizePage(code, invite) {
   <div class="card done" id="done_view" style="display:none">
     <h1 id="done_title">Done</h1>
     <p class="sub" id="done_sub"></p>
-    <label>Claude Code / CLI setup — paste into your shell profile</label>
+    <label>Claude Code setup — paste into splynx/.claude/settings.local.json</label>
     <pre id="snippet"></pre>
     <button class="copy" id="copy">Copy</button>
     <p class="note" id="done_note"></p>
@@ -582,9 +582,11 @@ el("go").onclick = async () => {
   el("done_view").style.display = "";
   el("done_title").textContent = body.delivered ? "Plugin connected" : "Token created";
   el("done_sub").textContent = "Welcome, " + body.name + "!";
-  el("snippet").textContent =
-    "export FIGMATE_SERVER=" + body.server + "\\n" +
-    "export FIGMATE_TOKEN=" + body.token;
+  el("snippet").textContent = JSON.stringify(
+    { env: { FIGMATE_SERVER: body.server, FIGMATE_TOKEN: body.token } },
+    null,
+    2,
+  );
   el("done_note").textContent = body.delivered
     ? "The plugin saved the token and is reconnecting — the bar in Figma turns green in a moment."
     : "The plugin didn't get the token automatically (no matching code). Open the plugin in Figma, " +
