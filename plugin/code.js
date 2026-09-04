@@ -8,7 +8,7 @@
 
 // Shown in the plugin window title so a running build is identifiable at a
 // glance. Bump on every distributed build.
-const VERSION = "2.0";
+const VERSION = "1.1";
 
 figma.showUI(__html__, { width: 240, height: 32, title: "Figmate Bridge v" + VERSION });
 
