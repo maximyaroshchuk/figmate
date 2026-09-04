@@ -21,6 +21,10 @@
 import { SETUP_PAGE } from "./setup-page.js";
 
 const ERROR_HINTS = [
+  ["read-only",
+   "the file is open in Dev Mode / view seat — the document is read-only; reads work, writes need edit rights or your own drafts copy"],
+  ["readonly",
+   "the file is open in Dev Mode / view seat — the document is read-only; reads work, writes need edit rights or your own drafts copy"],
   ["fills and strokes variable bindings must be set on paints directly",
    "use h.bF(node, idx, varId) to bind a fill paint to a variable"],
   ["strokes variable bindings must be set on paints directly",
