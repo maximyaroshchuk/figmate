@@ -300,6 +300,52 @@ export const SETUP_PAGE = `<!DOCTYPE html>
     color: var(--muted);
     font-size: 14px;
   }
+  /* ── connection switch ── */
+  .switch {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 12px;
+    margin: 28px 0 34px;
+  }
+  .switch button {
+    text-align: left;
+    background: var(--surface);
+    border: 1.5px solid var(--line);
+    border-radius: 14px;
+    padding: 15px 18px;
+    font: inherit;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .switch button:hover { border-color: var(--accent); }
+  .switch button[aria-pressed="true"] {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .switch .name {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-weight: 600;
+    font-size: 16px;
+  }
+  .switch .name::before {
+    content: "";
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    border: 1.5px solid var(--accent);
+    flex: none;
+  }
+  .switch button[aria-pressed="true"] .name::before { background: var(--accent); }
+  .switch .what {
+    display: block;
+    color: var(--muted);
+    font-size: 14px;
+    margin-top: 5px;
+  }
+  /* Each block declares which mode it belongs to; the switch shows one set. */
+  [data-mode]:not(.shown) { display: none; }
 </style>
 </head>
 <body>
@@ -309,8 +355,17 @@ export const SETUP_PAGE = `<!DOCTYPE html>
     <div class="wordmark">
       <h1>Figmate<span class="dot">.</span></h1>
     </div>
-    <p class="tagline">Підключення Claude Code до Figma: агент читає й редагує макети через ваш плагін. Установка — один раз, хвилин на п'ять.</p>
-    <div class="chain" aria-label="Ланцюг роботи">
+    <p class="tagline">Підключення Claude Code до Figma: агент читає й редагує макети через ваш плагін. Два способи — локальний демон у себе на ноуті або цей спільний воркер. Установка в обох випадках — один раз, хвилин на п'ять.</p>
+    <div class="chain" data-mode="local" aria-label="Ланцюг роботи через локальний демон">
+      <span class="node">Claude Code</span>
+      <span class="arrow">→</span>
+      <span class="node">локальний демон</span>
+      <span class="arrow">→</span>
+      <span class="node">плагін у вашій Figma</span>
+      <span class="arrow">→</span>
+      <span class="node">файл</span>
+    </div>
+    <div class="chain" data-mode="worker" aria-label="Ланцюг роботи через воркер">
       <span class="node">Claude Code</span>
       <span class="arrow">→</span>
       <span class="node">figmate worker</span>
@@ -321,12 +376,106 @@ export const SETUP_PAGE = `<!DOCTYPE html>
     </div>
   </header>
 
-  <div class="steps">
+  <div class="switch" role="group" aria-label="Тип підключення">
+    <button type="button" id="pick_local" aria-pressed="false">
+      <span class="name">Локальний демон</span>
+      <span class="what">Клонуєте репо й тримаєте демон у себе. Без токенів і без сервера.</span>
+    </button>
+    <button type="button" id="pick_worker" aria-pressed="false">
+      <span class="name">Спільний воркер</span>
+      <span class="what">Качаєте лише плагін, тиснете Authorize і отримуєте персональний токен.</span>
+    </button>
+  </div>
+
+  <!-- ── local ── -->
+  <div class="steps" data-mode="local">
+    <div class="step">
+      <div class="step-head">
+        <h2>Клонуйте репозиторій</h2>
+        <span class="once">один раз</span>
+      </div>
+      <p>Усе потрібне лежить у репо: і плагін, і демон. Потрібен лише Node 18+ — жодних залежностей ставити не треба.</p>
+      <div class="codeblock">
+        <pre>git clone https://github.com/maximyaroshchuk/figmate.git ~/Work/figmate</pre>
+        <button class="copy" type="button">Copy</button>
+      </div>
+      <p>Кладіть у постійне місце: Figma читає dev-плагін з диска, тож папку потім не переносьте й не видаляйте.</p>
+    </div>
+
+    <div class="step">
+      <div class="step-head">
+        <h2>Запустіть демон</h2>
+        <span class="once">щоразу</span>
+      </div>
+      <div class="codeblock">
+        <pre>node ~/Work/figmate/local/figmate-local.js</pre>
+        <button class="copy" type="button">Copy</button>
+      </div>
+      <p>Він піднімається на <code>127.0.0.1:8787</code> і пише <code>waiting for the plugin…</code>. Залиште таб термінала відкритим — поки демон живий, працює й агент. Перевірка з іншого таба:</p>
+      <div class="codeblock">
+        <pre>curl -s http://127.0.0.1:8787/status</pre>
+        <button class="copy" type="button">Copy</button>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-head">
+        <h2>Імпортуйте плагін у Figma Desktop</h2>
+        <span class="once">один раз</span>
+      </div>
+      <p><span class="menu-path">Plugins → Development → Import plugin from manifest…</span></p>
+      <p>Виберіть <code>~/Work/figmate/plugin/manifest.json</code>. Плагін з'явиться в меню як <strong>Figmate Bridge</strong>.</p>
+    </div>
+
+    <div class="step">
+      <div class="step-head">
+        <h2>Перемкніть плагін на локальний демон</h2>
+        <span class="once">один раз</span>
+      </div>
+      <p>Запустіть плагін: <span class="menu-path">Plugins → Development → Figmate Bridge</span>, натисніть шестерню й оберіть <strong>Use local daemon</strong>.</p>
+      <p>Бар одразу стане <span class="status ok">зеленим Connected</span>, а в терміналі з'явиться <code>plugin connected</code>. Ніякої авторизації та токенів тут немає — усе лишається на вашій машині.</p>
+    </div>
+
+    <div class="step">
+      <div class="step-head">
+        <h2>Дайте адресу своєму Claude Code</h2>
+        <span class="once">один раз</span>
+      </div>
+      <p>Вставте в <code>splynx/.claude/settings.local.json</code> (він gitignored) або глобально в <code>~/.claude/settings.json</code>:</p>
+      <div class="codeblock">
+        <pre>{
+  <span class="cm">"env"</span>: {
+    <span class="cm">"FIGMATE_SERVER"</span>: "http://127.0.0.1:8787"
+  }
+}</pre>
+        <button class="copy" type="button">Copy</button>
+      </div>
+      <p><code>FIGMATE_TOKEN</code> не потрібен — демон його ігнорує.</p>
+    </div>
+
+    <div class="step">
+      <div class="step-head">
+        <h2>Поставте скіл агенту</h2>
+        <span class="once">один раз</span>
+      </div>
+      <p>Скіл із того ж репо навчає Claude Code самостійно читати figma-лінки через figmate:</p>
+      <div class="codeblock">
+        <pre>mkdir -p ~/.claude/skills/figmate
+cp ~/Work/figmate/skills/figmate/SKILL.md ~/.claude/skills/figmate/</pre>
+        <button class="copy" type="button">Copy</button>
+      </div>
+      <p>Діє з наступної сесії Claude Code.</p>
+    </div>
+  </div>
+
+  <!-- ── worker ── -->
+  <div class="steps" data-mode="worker">
     <div class="step">
       <div class="step-head">
         <h2>Завантажте плагін</h2>
         <span class="once">один раз</span>
       </div>
+      <p>Репо клонувати не треба — для цього способу достатньо самого плагіна.</p>
       <p><a class="download" href="https://drive.google.com/file/d/1Sno74iPdnN3fYciZVrkjB3IY2N_EYDuI/view?usp=sharing" target="_blank" rel="noopener">Завантажити figmate-plugin.zip</a></p>
       <p>Розпакуйте архів у постійне місце — Figma читає dev-плагін з диска, тож папку потім не переносьте й не видаляйте:</p>
       <div class="codeblock">
@@ -394,6 +543,8 @@ cp ~/Work/figmate-plugin/skills/figmate/SKILL.md ~/.claude/skills/figmate/</pre>
       <li>Плагін працює з <strong>відкритим</strong> файлом: перейшли в інший файл — натисніть <kbd>⌥⌘P</kbd> (Run last plugin), і все.</li>
       <li>Файл, де у вас лише перегляд: зробіть <span class="menu-path">Duplicate to your drafts</span> і відкрийте копію — у ній плагін має повні права.</li>
       <li>«Подивись, що я виділив» теж працює — агент читає поточне виділення.</li>
+      <li data-mode="local" class="shown">Передумали й хочете спільний сервер — той самий плагін: шестерня, вставити адресу воркера й пройти Authorize.</li>
+      <li data-mode="worker" class="shown">Хочете все тримати в себе — той самий плагін: клонуйте репо, запустіть демон і натисніть <strong>Use local daemon</strong>.</li>
     </ul>
   </section>
 
@@ -408,10 +559,53 @@ cp ~/Work/figmate-plugin/skills/figmate/SKILL.md ~/.claude/skills/figmate/</pre>
           <td>Відкрийте файл у Figma → <kbd>⌥⌘P</kbd></td>
         </tr>
         <tr>
+          <td>Меню Plugins неактивне у файлі</td>
+          <td>У файлі немає права редагування</td>
+          <td><span class="menu-path">Duplicate to your drafts</span> → працюйте з копією</td>
+        </tr>
+        <tr>
           <td>Бар «Slot busy»</td>
           <td>Плагін відкритий у другому вікні Figma</td>
           <td>Закрийте його там — цей перепідключиться сам</td>
         </tr>
+      </table>
+    </div>
+  </section>
+
+  <section class="extra" data-mode="local">
+    <h2>Якщо щось не так — локальний демон</h2>
+    <div class="table-scroll">
+      <table>
+        <tr><th>Симптом</th><th>Причина</th><th>Що зробити</th></tr>
+        <tr>
+          <td>Агент: <code>Failed to connect</code></td>
+          <td>Демон не запущений</td>
+          <td><code>node ~/Work/figmate/local/figmate-local.js</code></td>
+        </tr>
+        <tr>
+          <td><code>port 8787 is busy</code></td>
+          <td>Демон уже працює в іншому табі</td>
+          <td>Перевірте: <code>curl -s http://127.0.0.1:8787/status</code></td>
+        </tr>
+        <tr>
+          <td>Бар плагіна не зеленіє</td>
+          <td>У полі Server лишилась адреса воркера</td>
+          <td>Шестерня → <strong>Use local daemon</strong></td>
+        </tr>
+        <tr>
+          <td>Демон мовчить на запити</td>
+          <td>Figma закрита або плагін не запущений у цьому файлі</td>
+          <td><kbd>⌥⌘P</kbd> у потрібному файлі — у терміналі з'явиться <code>plugin connected</code></td>
+        </tr>
+      </table>
+    </div>
+  </section>
+
+  <section class="extra" data-mode="worker">
+    <h2>Якщо щось не так — воркер</h2>
+    <div class="table-scroll">
+      <table>
+        <tr><th>Симптом</th><th>Причина</th><th>Що зробити</th></tr>
         <tr>
           <td>Бар «Invalid token» / «Not authorized»</td>
           <td>Токен відкликано</td>
@@ -427,11 +621,6 @@ cp ~/Work/figmate-plugin/skills/figmate/SKILL.md ~/.claude/skills/figmate/</pre>
           <td>Порожній чи старий <code>FIGMATE_TOKEN</code> в env</td>
           <td>Звірте значення в <code>~/.claude/settings.json</code>, перезапустіть сесію</td>
         </tr>
-        <tr>
-          <td>Меню Plugins неактивне у файлі</td>
-          <td>У файлі немає права редагування</td>
-          <td><span class="menu-path">Duplicate to your drafts</span> → працюйте з копією</td>
-        </tr>
       </table>
     </div>
   </section>
@@ -440,6 +629,31 @@ cp ~/Work/figmate-plugin/skills/figmate/SKILL.md ~/.claude/skills/figmate/</pre>
     Репозиторій: <a href="https://github.com/maximyaroshchuk/figmate">github.com/maximyaroshchuk/figmate</a> · сервер: figmate.rainoldweb.workers.dev · базується на <a href="https://github.com/denysosadchyi/figmosha2">figmosha2</a>
   </footer>
 </div>
+
+<script>
+  // Connection type: the choice shows one set of steps and is remembered, so a
+  // teammate who comes back to the page lands where they left off.
+  const MODES = ["local", "worker"];
+  const buttons = { local: document.getElementById("pick_local"), worker: document.getElementById("pick_worker") };
+
+  function setMode(mode) {
+    if (!MODES.includes(mode)) mode = "local";
+    document.querySelectorAll("[data-mode]").forEach((node) => {
+      node.classList.toggle("shown", node.dataset.mode === mode);
+    });
+    MODES.forEach((name) => buttons[name].setAttribute("aria-pressed", String(name === mode)));
+    try { localStorage.setItem("figmate-mode", mode); } catch (e) { /* private mode */ }
+    try { history.replaceState(null, "", "#" + mode); } catch (e) { /* sandboxed */ }
+  }
+
+  MODES.forEach((name) => buttons[name].addEventListener("click", () => setMode(name)));
+
+  let initial = location.hash.slice(1);
+  if (!MODES.includes(initial)) {
+    try { initial = localStorage.getItem("figmate-mode") || "local"; } catch (e) { initial = "local"; }
+  }
+  setMode(initial);
+</script>
 
 <script>
   document.querySelectorAll(".copy").forEach((button) => {
