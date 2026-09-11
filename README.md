@@ -1,10 +1,22 @@
 # Figmate
 
-Drive Figma from Claude Code (or any HTTP client) — for a whole team. A small
-dev plugin inside Figma Desktop keeps a WebSocket to a Cloudflare Worker; you
-POST Figma Plugin API code to the worker and get the result back: read a
-design's full spec, rename layers, swap variants, bind tokens, build frames —
-without clicking through the editor.
+Drive Figma from Claude Code (or any HTTP client). A small dev plugin inside
+Figma Desktop keeps a WebSocket open to a bridge; you POST Figma Plugin API code
+to the bridge and get the result back: read a design's full spec, rename layers,
+swap variants, bind tokens, build frames — without clicking through the editor.
+
+The bridge comes in two flavours, same HTTP contract either way.
+
+**A local daemon** — one command, nothing to install, nothing to authorize:
+
+```
+agent / CLI ──http://127.0.0.1:8787──▶ local daemon ──ws──▶ plugin in YOUR Figma
+                                       (node local/figmate-local.js)
+```
+
+**A team worker on Cloudflare** — one address for everyone, a personal token
+each, and requests sent with a token reach only the Figma of the person who
+owns it:
 
 ```
 agent / CLI ──HTTPS + personal token──▶ Cloudflare Worker ──wss──▶ plugin in YOUR Figma
@@ -12,10 +24,17 @@ agent / CLI ──HTTPS + personal token──▶ Cloudflare Worker ──wss─
                                          per token)
 ```
 
-Every teammate gets a personal token; requests sent with a token reach only the
-Figma of the person who owns it.
+## Local setup (one developer)
 
-## Teammate setup
+```bash
+node local/figmate-local.js        # 127.0.0.1:8787, no token, no dependencies
+```
+
+In Figma: `Plugins → Figmate Bridge → ⚙ → Use local daemon`. In Claude Code:
+`FIGMATE_SERVER=http://127.0.0.1:8787` (no `FIGMATE_TOKEN` needed). Details and
+troubleshooting: [`local/README.md`](local/README.md).
+
+## Team setup (a shared worker)
 
 Open the worker's root page — it is the setup guide:
 
@@ -66,6 +85,7 @@ the thing you want in front of a model before it writes UI code.
 
 ```bash
 node tests/helpers.test.js                                # plugin helpers
+node tests/local.test.js                                  # local daemon, end to end
 
 # Worker e2e (black-box over HTTP/WS against a live wrangler dev):
 cd worker && echo 'INVITE_CODE=dev-invite' > .dev.vars && npx wrangler dev --port 8799 &

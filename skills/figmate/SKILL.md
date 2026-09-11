@@ -28,7 +28,10 @@ EOF
 When something is off:
 - `503 plugin not connected` → tell the user in one line: "open the file in Figma and press ⌥⌘P (Run last plugin)". No re-authorization needed — the plugin keeps its token forever.
 - `node not found` → the file open in Figma is not the one from the link. The plugin only works with the open file; if the user cannot edit that file, they duplicate it to Drafts and open the copy.
-- `401` → check `FIGMATE_TOKEN` in env (`~/.claude/settings.json`).
+- `401` → check `FIGMATE_TOKEN` in env (`~/.claude/settings.json`). Not possible when
+  `FIGMATE_SERVER` is a local daemon (`127.0.0.1`) — it needs no token.
+- `Failed to connect` to a `127.0.0.1` server → the local daemon is down; the user
+  starts it with `node local/figmate-local.js`.
 - Execution errors come with a `hint` field — follow it before debugging on your own.
 
 ## DEEP READ — mandatory before implementing any UI

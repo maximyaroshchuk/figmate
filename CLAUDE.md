@@ -1,9 +1,14 @@
 # Figmate — Claude Code instructions
 
 Figmate lets an agent read and edit Figma documents over plain HTTP. Requests go
-to a Cloudflare Worker (`FIGMATE_SERVER`); the worker relays them over WebSocket
-to the Figmate Bridge plugin running inside the user's Figma Desktop, where the
-code executes against the real document.
+to `FIGMATE_SERVER`, which relays them over WebSocket to the Figmate Bridge
+plugin running inside the user's Figma Desktop, where the code executes against
+the real document.
+
+`FIGMATE_SERVER` is either the team's Cloudflare Worker (personal token per
+teammate) or a local daemon on the user's own machine
+(`node local/figmate-local.js`, `http://127.0.0.1:8787`, no token at all). The
+HTTP contract is identical, so nothing below depends on which one is running.
 
 ## Talking to the server
 
@@ -24,8 +29,11 @@ curl -s "$FIGMATE_SERVER/status" -H "Authorization: Bearer $FIGMATE_TOKEN"
 - Add `"timeout": 120` next to `"code"` for long operations.
 - Errors come back as `{ok:false, error, hint?, stack, logs}` — when the worker
   recognizes a common mistake it adds a `hint`; follow it first.
-- A `401` means the token is missing or wrong; `503 plugin not connected` means
-  the user has to run the plugin in Figma (⌥⌘P — Run last plugin).
+- A `401` means the token is missing or wrong — with the local daemon it cannot
+  happen, it ignores tokens. `503 plugin not connected` means the user has to
+  run the plugin in Figma (⌥⌘P — Run last plugin).
+- `Failed to connect` against a `127.0.0.1` server means the local daemon is not
+  running: `node local/figmate-local.js`.
 
 ## The `h.*` helpers (available in every exec)
 
@@ -94,8 +102,14 @@ Prefer helpers over hand-rolled equivalents — they encode the API's traps
   self-serve authorize flow, and the teammate setup page at `/`.
   Deploy: `cd worker && npx wrangler deploy`. The `INVITE_CODE` secret is a
   dashboard variable and survives deploys.
+- `local/` — the single-developer alternative to the worker: one zero-dependency
+  Node file serving the same `/exec`, `/status` and WS `/plugin` on loopback,
+  without tokens or pairing. Run: `node local/figmate-local.js`.
+- `shared/error-hints.json` — the error→hint table both of them answer with.
 - `tests/helpers.test.js` — pure-logic checks for the helpers
   (`node tests/helpers.test.js`).
+- `tests/local.test.js` — black-box checks for the local daemon over a fake
+  plugin socket (`node tests/local.test.js`).
 - `tests/test_worker.py` — black-box worker protocol tests.
 - The committed `ui.html` keeps `INVITE_CODE` empty on purpose — the invite is
   injected only into the zip that gets distributed to teammates.

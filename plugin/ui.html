@@ -112,11 +112,12 @@
   </div>
 
   <div class="view" id="view_settings">
-    <label>Server — empty for local dev (wrangler dev)</label>
+    <label>Server — the team worker, or the local daemon</label>
     <input id="field_server" placeholder="https://figmate.example.workers.dev" spellcheck="false">
-    <label>Token — filled automatically by Authorize</label>
+    <label>Token — filled automatically by Authorize, not needed locally</label>
     <input id="field_token" type="password" placeholder="your personal token" spellcheck="false">
     <button class="action" id="save">Save &amp; connect</button>
+    <button class="action secondary" id="use_local">Use local daemon</button>
     <button class="action secondary" id="copy_cli">Copy CLI setup</button>
   </div>
 
@@ -139,11 +140,12 @@ const GLYPHS = {
 // gets distributed to teammates has it injected, so their authorize page
 // opens pre-filled and they only type a name.
 const DEFAULT_SERVER = "wss://figmate.rainoldweb.workers.dev";
+const LOCAL_SERVER = "ws://localhost:8787";
 const INVITE_CODE = "";
 
 const VIEW_SIZES = {
   bar: { w: 240, h: 32 },
-  settings: { w: 260, h: 230 },
+  settings: { w: 260, h: 262 },
   pair: { w: 280, h: 210 },
 };
 
@@ -352,9 +354,21 @@ el("save").onclick = () => {
   // code.js answers with a fresh "config" message, which reconnects.
 };
 
+// The local daemon needs no token, and its port is the one already listed in
+// manifest.json allowedDomains.
+el("use_local").onclick = () => {
+  el("field_server").value = LOCAL_SERVER;
+  el("field_token").value = "";
+  el("save").onclick();
+};
+
 el("copy_cli").onclick = (event) => {
-  const snippet = "export FIGMATE_SERVER=" + httpBase() + "\n"
-    + "export FIGMATE_TOKEN=" + (((config && config.token) || el("field_token").value.trim()) || "<your token>");
+  const base = httpBase();
+  const token = ((config && config.token) || el("field_token").value.trim());
+  // The local daemon ignores tokens, so don't hand out a line to paste.
+  const snippet = /^http:\/\/(localhost|127\.)/.test(base)
+    ? "export FIGMATE_SERVER=" + base
+    : "export FIGMATE_SERVER=" + base + "\n" + "export FIGMATE_TOKEN=" + (token || "<your token>");
   const button = event.target;
   const flash = (text) => {
     button.textContent = text;

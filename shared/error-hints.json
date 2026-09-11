@@ -1,0 +1,62 @@
+[
+  [
+    "read-only",
+    "the file is open in Dev Mode / view seat — the document is read-only; reads work, writes need edit rights or your own drafts copy"
+  ],
+  [
+    "readonly",
+    "the file is open in Dev Mode / view seat — the document is read-only; reads work, writes need edit rights or your own drafts copy"
+  ],
+  [
+    "fills and strokes variable bindings must be set on paints directly",
+    "use h.bF(node, idx, varId) to bind a fill paint to a variable"
+  ],
+  [
+    "strokes variable bindings must be set on paints directly",
+    "use h.bS(node, idx, varId) to bind a stroke paint to a variable"
+  ],
+  [
+    "Cannot assign to read only property",
+    "node.fills/strokes is frozen — copy via JSON.parse(JSON.stringify(...)) before mutating, or use h.bF()/h.bS()"
+  ],
+  [
+    "permission not specified in manifest",
+    "manifest.json missing a permission — edit plugin/manifest.json, then re-import the plugin in Figma"
+  ],
+  [
+    "unloaded font",
+    "use h.setText(node, text) or h.withFonts(root, fn) — they autoload fonts. Or manually: await figma.loadFontAsync(node.fontName)"
+  ],
+  [
+    "font has not been loaded",
+    "use h.setText(node, text) or h.withFonts(root, fn) — they autoload fonts"
+  ],
+  [
+    "Cannot find font",
+    "fontName may be missing or mixed — check node.fontName before loading"
+  ],
+  [
+    "appendChild",
+    "create node, then parent.appendChild(node) BEFORE setting layoutMode/resize/itemSpacing/padding"
+  ],
+  [
+    "Unable to find a variant",
+    "no variant matches those property values — check available: const v = await h.variantsOf(instance); return v.groups"
+  ],
+  [
+    "Invalid property name",
+    "check available variants: const v = await h.variantsOf(instance); return v.groups"
+  ],
+  [
+    "Invalid value",
+    "check variant values: const v = await h.variantsOf(instance); return v.groups"
+  ],
+  [
+    "setProperties",
+    "if 'Unable to find variant' — check available values via h.variantsOf(instance)"
+  ],
+  [
+    "not a function",
+    "API may be deprecated or renamed — check figma.* available methods, or use Async variants"
+  ]
+]
