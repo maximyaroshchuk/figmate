@@ -626,7 +626,7 @@ cp ~/Work/figmate-plugin/skills/figmate/SKILL.md ~/.claude/skills/figmate/</pre>
   </section>
 
   <footer>
-    Репозиторій: <a href="https://github.com/maximyaroshchuk/figmate">github.com/maximyaroshchuk/figmate</a> · сервер: figmate.rainoldweb.workers.dev · базується на <a href="https://github.com/denysosadchyi/figmosha2">figmosha2</a>
+    Репозиторій: <a href="https://github.com/maximyaroshchuk/figmate">github.com/maximyaroshchuk/figmate</a> · сервер: figmate.rainoldweb.workers.dev
   </footer>
 </div>
 

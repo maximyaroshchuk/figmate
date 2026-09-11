@@ -99,13 +99,6 @@ FIGMATE_WORKER_URL=http://localhost:8799 python3 -m pytest tests/test_worker.py 
 - The invite code is a shared team secret: it lives in the worker secret and in
   the distributed plugin zip, never in this repository.
 
-## Credits
-
-The idea of driving Figma through a dev plugin comes from
-[figmosha2](https://github.com/denysosadchyi/figmosha2) by Denys Osadchyi —
-Figmate started as its fork and has since been rewritten from scratch around a
-Cloudflare Worker with self-serve team auth.
-
 ## License
 
 MIT — see [LICENSE](LICENSE).
