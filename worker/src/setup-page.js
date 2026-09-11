@@ -377,13 +377,13 @@ export const SETUP_PAGE = `<!DOCTYPE html>
   </header>
 
   <div class="switch" role="group" aria-label="Тип підключення">
-    <button type="button" id="pick_local" aria-pressed="false">
-      <span class="name">Локальний демон</span>
-      <span class="what">Клонуєте репо й тримаєте демон у себе. Без токенів і без сервера.</span>
-    </button>
     <button type="button" id="pick_worker" aria-pressed="false">
       <span class="name">Спільний воркер</span>
       <span class="what">Качаєте лише плагін, тиснете Authorize і отримуєте персональний токен.</span>
+    </button>
+    <button type="button" id="pick_local" aria-pressed="false">
+      <span class="name">Локальний демон</span>
+      <span class="what">Клонуєте репо й тримаєте демон у себе. Без токенів і без сервера.</span>
     </button>
   </div>
 
@@ -637,7 +637,7 @@ cp ~/Work/figmate-plugin/skills/figmate/SKILL.md ~/.claude/skills/figmate/</pre>
   const buttons = { local: document.getElementById("pick_local"), worker: document.getElementById("pick_worker") };
 
   function setMode(mode) {
-    if (!MODES.includes(mode)) mode = "local";
+    if (!MODES.includes(mode)) mode = "worker";
     document.querySelectorAll("[data-mode]").forEach((node) => {
       node.classList.toggle("shown", node.dataset.mode === mode);
     });
@@ -650,7 +650,7 @@ cp ~/Work/figmate-plugin/skills/figmate/SKILL.md ~/.claude/skills/figmate/</pre>
 
   let initial = location.hash.slice(1);
   if (!MODES.includes(initial)) {
-    try { initial = localStorage.getItem("figmate-mode") || "local"; } catch (e) { initial = "local"; }
+    try { initial = localStorage.getItem("figmate-mode") || "worker"; } catch (e) { initial = "worker"; }
   }
   setMode(initial);
 </script>
