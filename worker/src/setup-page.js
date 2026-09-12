@@ -476,7 +476,7 @@ cp ~/Work/figmate/skills/figmate/SKILL.md ~/.claude/skills/figmate/</pre>
         <span class="once">один раз</span>
       </div>
       <p>Репо клонувати не треба — для цього способу достатньо самого плагіна.</p>
-      <p><a class="download" href="https://drive.google.com/file/d/1TjZngKVBZGw0W-2av6q44U31qkSspyP2/view?usp=sharing" target="_blank" rel="noopener">Завантажити figmate-plugin.zip</a></p>
+      <p><a class="download" href="https://drive.google.com/file/d/1NYg-19cN4Rs1WsJztOOuTyluPgEjwxp0/view?usp=sharing" target="_blank" rel="noopener">Завантажити figmate-plugin.zip</a></p>
       <p>Розпакуйте архів у постійне місце — Figma читає dev-плагін з диска, тож папку потім не переносьте й не видаляйте:</p>
       <div class="codeblock">
         <pre>unzip ~/Downloads/figmate-plugin.zip -d ~/Work/figmate-plugin</pre>
