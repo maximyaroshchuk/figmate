@@ -501,6 +501,7 @@ cp ~/Work/figmate/skills/figmate/SKILL.md ~/.claude/skills/figmate/</pre>
       <p>Запустіть плагін: <span class="menu-path">Plugins → Development → Figmate Bridge</span> — і натисніть кнопку <strong>Authorize</strong>.</p>
       <p>У браузері відкриється сторінка, де все вже підставлено з плагіна — введіть лише своє ім'я та натисніть <strong>Authorize</strong>. Плагін сам отримає персональний токен, і бар стане <span class="status ok">зеленим Connected</span>.</p>
       <div class="callout"><p>Токен запам'ятовується назавжди — повторно авторизуватись не треба ні в нових файлах, ні після перезапуску Figma.</p></div>
+      <div class="callout"><p>Якщо сторінка все ж показує поле <strong>Invite code — ask the admin</strong> — вставте туди <code>9bv0rUNhY0JgVyeiTLdtjN0Z0gn0pJ2rLkJfgsPmbeP</code>.</p></div>
     </div>
 
     <div class="step">
@@ -614,7 +615,7 @@ cp ~/Work/figmate-plugin/skills/figmate/SKILL.md ~/.claude/skills/figmate/</pre>
         <tr>
           <td>Сторінка каже «wrong invite code»</td>
           <td>Застарілий архів плагіна</td>
-          <td>Скачайте свіжий zip за лінком з кроку 1 і переімпортуйте плагін</td>
+          <td>Скачайте свіжий zip за лінком з кроку 1 і переімпортуйте плагін, або впишіть код вручну: <code>9bv0rUNhY0JgVyeiTLdtjN0Z0gn0pJ2rLkJfgsPmbeP</code></td>
         </tr>
         <tr>
           <td>Агент отримує <code>401</code></td>

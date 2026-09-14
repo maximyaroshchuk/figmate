@@ -59,8 +59,8 @@ npx wrangler deploy                    # prints https://figmate.<account>.worker
 The free Cloudflare tier is enough: Durable Objects run on the SQLite backend
 and plugin sockets use the hibernation API, so idle connections cost nothing.
 
-To distribute the plugin, build the zip with the invite baked in (the committed
-source keeps it empty):
+The committed plugin source already carries the current team invite. To ship a
+zip bound to a different (rotated) code:
 
 ```bash
 ./build-plugin.sh <invite-code>        # produces figmate-plugin.zip
@@ -96,8 +96,10 @@ FIGMATE_WORKER_URL=http://localhost:8799 python3 -m pytest tests/test_worker.py 
 
 - `/exec` runs arbitrary JS in the connected user's Figma file — treat tokens
   like passwords.
-- The invite code is a shared team secret: it lives in the worker secret and in
-  the distributed plugin zip, never in this repository.
+- The invite code is a shared team secret, but it is baked into the plugin
+  source and the setup page so teammates can self-serve. Anyone who has it can
+  mint a token — rotate the `INVITE_CODE` worker secret and rebuild the plugin
+  if it leaks beyond the team.
 
 ## License
 

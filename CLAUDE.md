@@ -111,5 +111,6 @@ Prefer helpers over hand-rolled equivalents — they encode the API's traps
 - `tests/local.test.js` — black-box checks for the local daemon over a fake
   plugin socket (`node tests/local.test.js`).
 - `tests/test_worker.py` — black-box worker protocol tests.
-- The committed `ui.html` keeps `INVITE_CODE` empty on purpose — the invite is
-  injected only into the zip that gets distributed to teammates.
+- The committed `ui.html` carries the current team `INVITE_CODE`, so a plugin
+  imported straight from these sources already pre-fills the authorize page.
+  `build-plugin.sh <code>` overwrites it when a zip needs a different invite.
