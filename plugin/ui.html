@@ -38,6 +38,19 @@
   .topbar[data-state="ok"]  { background: var(--ok); }
   .topbar[data-state="err"] { background: var(--err); }
 
+  /* The build stamp lives here rather than in the window title, where Figma
+     truncates it to "Figmate Bridge v1.1…" and it stops being readable. */
+  .footer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 20px;
+    font-size: 10px;
+    letter-spacing: 0.02em;
+    color: #8a8a8a;
+    background: #f0f0f0;
+  }
+
   .topbar .glyph { display: flex; font-size: 16px; flex: none; }
   .topbar .glyph svg { display: block; }
   .topbar[data-state="pending"] .glyph { animation: turn 1.1s linear infinite; }
@@ -111,6 +124,8 @@
     <button class="gear" id="gear" title="Server &amp; token settings">&#9881;</button>
   </div>
 
+  <div class="footer" id="footer"></div>
+
   <div class="view" id="view_settings">
     <label>Server — team worker or local daemon</label>
     <input id="field_server" placeholder="https://figmate.example.workers.dev" spellcheck="false">
@@ -144,7 +159,7 @@ const LOCAL_SERVER = "ws://localhost:8787";
 const INVITE_CODE = "9bv0rUNhY0JgVyeiTLdtjN0Z0gn0pJ2rLkJfgsPmbeP";
 
 const VIEW_SIZES = {
-  bar: { w: 240, h: 32 },
+  bar: { w: 240, h: 52 },
   settings: { w: 280, h: 284 },
   pair: { w: 280, h: 210 },
 };
@@ -343,7 +358,10 @@ window.onmessage = (event) => {
 
   if (msg.type === "config") {
     config = { server: msg.server || "", token: msg.token || "" };
-    if (msg.version) PLUGIN_VERSION = String(msg.version);
+    if (msg.version) {
+      PLUGIN_VERSION = String(msg.version);
+      el("footer").textContent = "v" + PLUGIN_VERSION;
+    }
     el("field_server").value = config.server;
     el("field_token").value = config.token;
     if (config.token) droppedBadToken = false;

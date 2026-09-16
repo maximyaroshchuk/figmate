@@ -945,10 +945,10 @@ figma.ui.onmessage = async (msg) => {
   }
 };
 
-// The build stamp, shown in the window title so a running build is identifiable
-// at a glance. This is the one place it lives — manifest.json cannot hold it,
-// Figma rejects any key it does not know — and pushConfig hands it to the UI so
-// the bridge announces the same number. build-plugin.sh rewrites it per build.
+// The build stamp. This is the one place it lives — manifest.json cannot hold
+// it, Figma rejects any key it does not know — and pushConfig hands it to the
+// UI, which shows it in the footer strip and announces it to the server. The
+// window title would truncate it. build-plugin.sh rewrites it per build.
 const BUILD_VERSION = "1.1.20260916";
 
-figma.showUI(__html__, { width: 240, height: 32, title: "Figmate Bridge v" + BUILD_VERSION });
+figma.showUI(__html__, { width: 240, height: 52, title: "Figmate Bridge" });
