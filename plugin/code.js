@@ -872,6 +872,12 @@ async function pushConfig() {
 async function runExec(msg) {
   const { id, code } = msg;
 
+  // Tell the server the sandbox has this request, before any of the work that
+  // would block the message queue. A liveness probe cannot be answered while
+  // code below is running — the sandbox is single-threaded — so the ack is the
+  // only honest evidence that the bridge is alive during a long exec.
+  figma.ui.postMessage({ type: "ack", id });
+
   const logLines = [];
   const print = (...args) => {
     const text = args
@@ -929,6 +935,12 @@ figma.ui.onmessage = async (msg) => {
       return;
     case "ui-size":
       figma.ui.resize(msg.w, msg.h);
+      return;
+    case "ping":
+      // The server's liveness probe, relayed by ui.html. Answering it from
+      // here is the whole point: it proves the sandbox is alive, which a pong
+      // sent by the UI frame alone does not — see the ping case in ui.html.
+      figma.ui.postMessage({ type: "pong" });
       return;
     case "exec":
       await runExec(msg);

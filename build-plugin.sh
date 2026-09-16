@@ -17,6 +17,15 @@ perl -pi -e 's{const INVITE_CODE = "[^"]*";}{const INVITE_CODE = "$ENV{INVITE}";
 
 grep -q "$INVITE" "$STAGE/plugin/ui.html" || { echo "invite injection failed" >&2; exit 1; }
 
+# One version for the build, stamped with the day it was cut: manifest.json is
+# where it lives, ui.html only carries a copy so the bridge can announce it.
+export PLUGIN_VERSION="1.1.$(date +%Y%m%d)"
+perl -pi -e 's{"version": "[^"]*"}{"version": "$ENV{PLUGIN_VERSION}"}' "$STAGE/plugin/manifest.json"
+perl -pi -e 's{const PLUGIN_VERSION = "[^"]*";}{const PLUGIN_VERSION = "$ENV{PLUGIN_VERSION}";}' "$STAGE/plugin/ui.html"
+
+grep -q "$PLUGIN_VERSION" "$STAGE/plugin/manifest.json" || { echo "version injection failed (manifest)" >&2; exit 1; }
+grep -q "$PLUGIN_VERSION" "$STAGE/plugin/ui.html" || { echo "version injection failed (ui)" >&2; exit 1; }
+
 (cd "$STAGE" && zip -qr figmate-plugin.zip plugin skills -x "*.DS_Store")
 mv "$STAGE/figmate-plugin.zip" "$ROOT/figmate-plugin.zip"
 echo "figmate-plugin.zip built (invite injected — the zip itself is gitignored)"

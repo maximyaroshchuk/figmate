@@ -55,6 +55,65 @@ function bearerToken(request, url) {
 
 const OPEN = 1; // WebSocket.READY_STATE_OPEN
 
+// How long a live plugin may take to answer a ping. It replies from ui.html
+// without touching code.js, so this bounds a round trip, not any real work.
+const PROBE_MS = 1000;
+
+// Race marker: the socket stopped answering while a request was in flight.
+const DEAD = Symbol("plugin socket unresponsive");
+
+// From this plugin version on, the pong is produced by code.js rather than by
+// ui.html, so answering the probe proves the sandbox is alive. Older plugins
+// answer from the UI frame, which a closed plugin can outlive — for those the
+// probe cannot tell a ghost from a working bridge, and a failed exec is the
+// only evidence available.
+const DEEP_PING_VERSION = "3.1";
+
+// Fallback gate for builds that predate the capability list. From this plugin
+// version on, code.js acknowledges every exec before it starts
+// working. That ack is the only liveness signal that survives a busy sandbox:
+// the ping is answered from code.js too, and Figma's plugin sandbox is
+// single-threaded, so a probe sent while an exec is running cannot be answered
+// until the exec finishes. Racing that probe against the exec used to kill the
+// socket of any call that held the sandbox for more than PROBE_MS — while the
+// code ran to completion and committed its edits, so the caller saw a 503 for
+// work that had actually been applied.
+const ACK_VERSION = "3.2";
+
+// How long the plugin may take to acknowledge an exec. It is posted before any
+// work, so this bounds a round trip plus one message-queue hop.
+const ACK_MS = 5000;
+
+// Per-socket state that has to survive hibernation, so it rides on the socket
+// rather than on the (evictable) Durable Object instance.
+function attrs(ws) {
+  try { return ws.deserializeAttachment() || {}; } catch { return {}; }
+}
+
+// What a socket can do. Builds from 1.1.* announce their features by name;
+// older ones only sent a protocol number, so fall back to comparing that.
+function hasCap(ws, cap, minVersion) {
+  const a = attrs(ws);
+  if (Array.isArray(a.caps)) return a.caps.includes(cap);
+  return atLeast(a.version, minVersion);
+}
+
+function attach(ws, patch) {
+  try { ws.serializeAttachment({ ...attrs(ws), ...patch }); } catch {}
+}
+
+// Numeric per segment: "3.10" is newer than "3.9", which a string compare of
+// the whole version would get backwards.
+function atLeast(version, minimum) {
+  const a = String(version || "0").split(".").map(Number);
+  const b = String(minimum).split(".").map(Number);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const x = a[i] || 0, y = b[i] || 0;
+    if (x !== y) return x > y;
+  }
+  return true;
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -220,11 +279,34 @@ export class Slot {
   constructor(ctx) {
     this.ctx = ctx;
     this.pending = new Map();  // rid -> {resolve, logs, t0}
-    this.pongWaiter = null;
+    this.pongWaiters = new Set();
+    this.ackWaiters = new Map();  // rid -> resolve
   }
 
+  // readyState alone cannot tell a live plugin from a half-open socket: when
+  // Figma is killed, the laptop sleeps or a VPN drops the link without a FIN,
+  // the socket stays OPEN here indefinitely. Everything that needs a plugin —
+  // not just a rival connection — has to ask.
   livePlugin() {
     return this.ctx.getWebSockets("plugin").find((s) => s.readyState === OPEN) || null;
+  }
+
+  // The same question as livePlugin(), answered honestly, at the cost of one
+  // round trip.
+  async livePluginChecked(timeoutMs = PROBE_MS) {
+    const ws = this.livePlugin();
+    if (!ws) return null;
+    if (await this.answersPing(ws, timeoutMs)) return ws;
+    this.dropUnresponsive(ws);
+    return null;
+  }
+
+  // A socket that will not answer is never coming back. Close it, so the slot
+  // is free for the next plugin instead of swallowing requests until they
+  // time out one by one.
+  dropUnresponsive(ws) {
+    this.failPending("plugin socket went unresponsive");
+    try { ws.close(1011, "unresponsive"); } catch {}
   }
 
   async fetch(request) {
@@ -253,7 +335,7 @@ export class Slot {
 
     if (url.pathname === "/status") {
       return json({
-        plugin_connected: this.livePlugin() !== null,
+        plugin_connected: (await this.livePluginChecked()) !== null,
         pending: this.pending.size,
         user: name,
       });
@@ -277,8 +359,12 @@ export class Slot {
       return new Response(null, { status: 101, webSocket: client });
     }
 
+    // A plugin that already failed to answer an exec has lost the benefit of
+    // the doubt: on an old build its pong proves nothing, and a fresh instance
+    // asking for the slot is better evidence than a probe. Without this a ghost
+    // holds the slot for good and the real plugin only ever sees "Slot busy".
     const old = this.livePlugin();
-    if (old && (await this.incumbentAnswers(old))) {
+    if (old && !attrs(old).sandboxSilent && (await this.answersPing(old))) {
       // Someone is really there — a second Figma window, or the plugin open in
       // both the stable and Beta apps. Only one may own the slot.
       server.accept();
@@ -300,18 +386,44 @@ export class Slot {
   // a live plugin from a half-open socket in about a second, so a reconnecting
   // plugin takes the slot immediately while a genuine second instance is
   // still turned away.
-  incumbentAnswers(ws, timeoutMs = 1000) {
-    try { ws.send(JSON.stringify({ type: "ping" })); } catch { return false; }
+  //
+  // The plugin answers "ping" in ui.html, before anything reaches code.js, so a
+  // pong means "the bridge is alive", never "your last exec finished" — a long
+  // or hung exec still pongs, and is left alone to run out its own timeout.
+  //
+  // Waiters are a Set: /status, /exec and a rival connection can probe at once,
+  // and a single pong has to settle all of them (one field would drop the rest
+  // and they would report a live plugin dead).
+  answersPing(ws, timeoutMs = PROBE_MS) {
+    try { ws.send(JSON.stringify({ type: "ping" })); } catch { return Promise.resolve(false); }
     return new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        this.pongWaiter = null;
-        resolve(false);
-      }, timeoutMs);
-      this.pongWaiter = () => {
+      const waiter = () => {
         clearTimeout(timer);
-        this.pongWaiter = null;
+        this.pongWaiters.delete(waiter);
         resolve(true);
       };
+      const timer = setTimeout(() => {
+        this.pongWaiters.delete(waiter);
+        resolve(false);
+      }, timeoutMs);
+      this.pongWaiters.add(waiter);
+    });
+  }
+
+  // Resolves true when the plugin acknowledges this exec, false if it stays
+  // silent past ACK_MS. Unlike answersPing this asks about one request, so a
+  // sandbox that is merely busy with earlier work cannot answer by accident.
+  waitAck(rid, timeoutMs = ACK_MS) {
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.ackWaiters.delete(rid);
+        resolve(false);
+      }, timeoutMs);
+      this.ackWaiters.set(rid, () => {
+        clearTimeout(timer);
+        this.ackWaiters.delete(rid);
+        resolve(true);
+      });
     });
   }
 
@@ -319,6 +431,7 @@ export class Slot {
     for (const [rid, entry] of this.pending) {
       entry.resolve({ id: rid, type: "error", text: reason });
     }
+    this.ackWaiters.clear();
   }
 
   async exec(request, name) {
@@ -354,16 +467,57 @@ export class Slot {
       return json({ ok: false, error: `send to plugin failed: ${e}` }, 500);
     }
 
+    // Liveness while the request is in flight. An ack-capable plugin answers
+    // before it starts working, so silence past ACK_MS really is a dead socket
+    // and the 503 is honest. An older plugin has no such signal — its ping is
+    // served by the same single-threaded sandbox that is busy running this very
+    // exec, so probing it would only report long calls as dead. For those, wait
+    // the request out: a genuinely dead socket costs one timeout, which is far
+    // cheaper than failing every heavy build that in fact succeeded.
+    const ackable = hasCap(ws, "ack", ACK_VERSION);
+    const wentSilent = ackable
+      ? this.waitAck(rid).then((acked) => (acked ? new Promise(() => {}) : DEAD))
+      : new Promise(() => {});
+
     const result = await Promise.race([
       answered,
+      wentSilent,
       new Promise((resolve) => setTimeout(() => resolve(null), timeoutSec * 1000)),
     ]);
     this.pending.delete(rid);
+    this.ackWaiters.delete(rid);
 
-    if (result === null) {
-      return json({ ok: false, error: `timeout after ${timeoutSec}s` }, 504);
+    if (result === DEAD) {
+      this.dropUnresponsive(ws);
+      return json({
+        ok: false,
+        error: `plugin not connected — open Figmate Bridge in Figma (user: ${name})`,
+        hint: "the previous connection died without closing; the slot is free now, re-run the plugin (⌥⌘P)",
+      }, 503);
     }
 
+    if (result === null) {
+      // Never close the socket on a timeout: slow code and a dead sandbox look
+      // identical from here, and a long-running exec would be killed with it.
+      //
+      // On a plugin new enough to pong from code.js the probe already tells the
+      // two apart, so a timeout means nothing but slow code and the socket
+      // keeps its standing. On an older build the pong proves only that the UI
+      // frame is running, so a timeout is the only evidence a ghost ever
+      // leaves — mark it, and connectPlugin stops defending it against the next
+      // instance.
+      const deep = hasCap(ws, "deep-ping", DEEP_PING_VERSION);
+      if (!deep) attach(ws, { sandboxSilent: true });
+      return json({
+        ok: false,
+        error: `timeout after ${timeoutSec}s`,
+        hint: deep
+          ? null
+          : "if this repeats, the plugin's UI may have outlived its sandbox — re-run the plugin (⌥⌘P); it will now take the slot back",
+      }, 504);
+    }
+
+    attach(ws, { sandboxSilent: false });
     const elapsed = Date.now() - t0;
     if (result.type === "error") {
       const errorText = result.text || "unknown error";
@@ -391,10 +545,21 @@ export class Slot {
     try { m = JSON.parse(message); } catch { return; }
 
     if (m.type === "pong") {
-      if (this.pongWaiter) this.pongWaiter();
+      for (const waiter of [...this.pongWaiters]) waiter();
       return;
     }
-    if (m.type === "hello") return;
+    if (m.type === "hello") {
+      attach(ws, {
+        version: String(m.version || "3.0"),
+        caps: Array.isArray(m.caps) ? m.caps.map(String) : null,
+      });
+      return;
+    }
+    if (m.type === "ack") {
+      const waiter = this.ackWaiters.get(m.id);
+      if (waiter) waiter();
+      return;
+    }
 
     const entry = this.pending.get(m.id);
     if (!entry) return; // late reply for a request that already timed out

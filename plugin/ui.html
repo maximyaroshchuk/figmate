@@ -199,6 +199,21 @@ let socket = null;
 let retryTimer = null;
 let droppedBadToken = false;
 
+// Retry forever — a bridge that gave up would need the user to notice and
+// re-run the plugin. The first retry stays fast so the common case (a worker
+// redeploy, a laptop waking) is back in a second; the delay then backs off so a
+// long outage does not hammer the server, and resets the moment we are in.
+const RETRY_MIN_MS = 1000;
+const RETRY_MAX_MS = 15000;
+let retryDelay = RETRY_MIN_MS;
+
+function retrySoon(delay) {
+  const wait = delay || retryDelay;
+  clearTimeout(retryTimer);
+  retryTimer = setTimeout(connect, wait);
+  if (!delay) retryDelay = Math.min(Math.round(retryDelay * 1.6), RETRY_MAX_MS);
+}
+
 function connect() {
   clearTimeout(retryTimer);
   setStatus("Connecting…", "pending");
@@ -209,7 +224,7 @@ function connect() {
     socket = new WebSocket(url);
   } catch (err) {
     debug("[ws] open failed: " + err.message);
-    retryTimer = setTimeout(connect, 2000);
+    retrySoon();
     return;
   }
 
@@ -218,7 +233,14 @@ function connect() {
     // worker — its "pair" message arrives right after open.
     setStatus("Connected", "ok");
     debug("[ws] connected");
-    try { socket.send(JSON.stringify({ type: "hello", version: "3.0" })); } catch (err) {}
+    retryDelay = RETRY_MIN_MS;
+    // The version is the build stamp, for humans and for the logs. What the
+    // server gates protocol features on is the capability list: a date-stamped
+    // version cannot be compared against "3.2", and naming the features outright
+    // is what the gate actually wants to know.
+    try {
+      socket.send(JSON.stringify({ type: "hello", version: PLUGIN_VERSION, caps: PLUGIN_CAPS }));
+    } catch (err) {}
   };
 
   socket.onmessage = (event) => {
@@ -234,9 +256,15 @@ function connect() {
         toPlugin({ type: "exec", id: msg.id, code: msg.code });
         break;
       case "ping":
-        // Liveness probe from the server when another plugin instance wants
-        // this slot — answering keeps it ours.
-        try { socket.send(JSON.stringify({ type: "pong" })); } catch (err) {}
+        // Liveness probe from the server. Answering it here would only prove
+        // that this iframe is running, which is the one thing that is never in
+        // doubt — a closed plugin can leave its UI alive with the socket and
+        // the timers still going, while the sandbox behind it is gone. Such a
+        // ghost used to pass the probe, hold the slot, and turn away the real
+        // plugin with "Slot busy". So the probe is forwarded to code.js, whose
+        // pong comes back through window.onmessage below: the answer then
+        // means the whole bridge is alive, not just this frame.
+        toPlugin({ type: "ping" });
         break;
       case "pair":
         // Multi-user server, no token yet: show the pairing code and the
@@ -287,12 +315,12 @@ function connect() {
       // Figma window. A 2s retry loop would spam both sides.
       setStatus("Slot busy", "err");
       debug("[ws] rejected: slot held by another plugin instance");
-      retryTimer = setTimeout(connect, 15000);
+      retrySoon(15000);
       return;
     }
     setStatus(currentView === "pair" ? "Authorize needed" : "Reconnecting…", "pending");
     debug("[ws] disconnected");
-    retryTimer = setTimeout(connect, 2000);
+    retrySoon();
   };
 }
 
@@ -325,12 +353,14 @@ window.onmessage = (event) => {
   // result / error / log flow straight through to the server.
   if (!socket || socket.readyState !== WebSocket.OPEN) {
     debug("[drop] ws not open, " + msg.type + " id=" + String(msg.id).slice(0, 8));
+    reconnect();
     return;
   }
   try {
     socket.send(JSON.stringify(msg));
   } catch (err) {
     debug("[send] failed: " + err.message);
+    reconnect();
     return;
   }
   if (msg.type === "result") debug("[ok]  " + String(msg.id).slice(0, 8));
@@ -391,6 +421,15 @@ el("copy_cli").onclick = (event) => {
     fallback();
   }
 };
+
+// Injected from plugin/manifest.json by build-plugin.sh; the literal below is
+// only the fallback for running the sources straight out of the repo.
+const PLUGIN_VERSION = "1.1.20260916";
+
+// Protocol features this build implements:
+//   deep-ping — the pong comes from code.js, so it proves the sandbox is alive
+//   ack       — code.js acknowledges an exec before it starts blocking work
+const PLUGIN_CAPS = ["deep-ping", "ack"];
 
 setStatus("Loading…", "pending");
 toPlugin({ type: "get-config" });

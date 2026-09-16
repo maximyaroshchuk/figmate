@@ -34,9 +34,18 @@ def ws_url(token=None):
 class FakePlugin:
     """Plays plugin/ui.html: pairs or connects, echoes exec, answers pings."""
 
-    def __init__(self, session, *, token=None, reply=None):
+    def __init__(self, session, *, token=None, reply=None, pong=True,
+                 version="3.1", caps=None, ack=True, work=0.0):
         self.session = session
         self.token = token
+        self.pong = pong          # False plays a socket whose far end is gone
+        self.version = version    # "3.0" answers pings from the UI frame
+        self.caps = caps          # None plays a build that predates the list
+        self.ack = ack            # False plays a sandbox that never got the job
+        # Seconds the "sandbox" is busy. Figma's is single-threaded, so during
+        # that window pings go unanswered however alive the plugin is.
+        self.work = work
+        self.busy = False
         self.reply = reply or (lambda code: {"text": "ok", "value": 42})
         self.ws = None
         self._task = None
@@ -45,7 +54,10 @@ class FakePlugin:
 
     async def __aenter__(self):
         self.ws = await self.session.ws_connect(ws_url(self.token), heartbeat=None)
-        await self.ws.send_str(json.dumps({"type": "hello", "version": "test"}))
+        hello = {"type": "hello", "version": self.version}
+        if self.caps is not None:
+            hello["caps"] = self.caps
+        await self.ws.send_str(json.dumps(hello))
         self._task = asyncio.create_task(self._pump())
         return self
 
@@ -70,9 +82,16 @@ class FakePlugin:
             m = json.loads(msg.data)
             mtype = m.get("type")
             if mtype == "ping":
-                await self.ws.send_str(json.dumps({"type": "pong"}))
+                if self.pong and not self.busy:
+                    await self.ws.send_str(json.dumps({"type": "pong"}))
             elif mtype == "exec":
                 self.seen_codes.append(m["code"])
+                if self.ack and self.caps and "ack" in self.caps:
+                    await self.ws.send_str(json.dumps({"type": "ack", "id": m["id"]}))
+                if self.work:
+                    self.busy = True
+                    await asyncio.sleep(self.work)
+                    self.busy = False
                 out = self.reply(m["code"])
                 await self.ws.send_str(json.dumps(
                     {"type": out.pop("type", "result"), "id": m["id"], **out}))
@@ -95,7 +114,11 @@ def bearer(token):
 def test_root_answers():
     async def go():
         async with aiohttp.ClientSession() as s:
+            # "/" is the human setup page; the machine-readable listing is /api.
             async with s.get(f"{WORKER}/") as r:
+                assert r.status == 200
+                assert "text/html" in r.headers.get("Content-Type", "")
+            async with s.get(f"{WORKER}/api") as r:
                 assert r.status == 200
                 assert (await r.json())["service"] == "figmate-worker"
     run(go())
@@ -242,4 +265,154 @@ def test_exec_timeout_is_504():
                                   json={"code": "sleep", "timeout": 1},
                                   headers=bearer(token)) as r:
                     assert r.status == 504
+    run(go())
+
+
+# ─── half-open sockets ──────────────────────────────────────────────────────
+#
+# When Figma is killed, the laptop sleeps or a VPN drops the link without a
+# FIN, the socket stays OPEN on the worker's side with nobody behind it. These
+# play that: a plugin that holds the socket but never answers anything.
+
+
+def test_status_reports_an_unresponsive_socket_as_disconnected():
+    async def go():
+        async with aiohttp.ClientSession() as s:
+            token = await register(s, "zombie-status")
+            async with FakePlugin(s, token=token, pong=False):
+                async with s.get(f"{WORKER}/status", headers=bearer(token)) as r:
+                    body = await r.json()
+                    assert body["plugin_connected"] is False, body
+    run(go())
+
+
+def test_exec_against_an_unresponsive_socket_is_503_not_a_timeout():
+    async def go():
+        async with aiohttp.ClientSession() as s:
+            token = await register(s, "zombie-exec")
+            reply = lambda code: {"type": "__drop__"}
+            async with FakePlugin(s, token=token, reply=reply, pong=False,
+                                  caps=["deep-ping", "ack"], ack=False):
+                started = asyncio.get_running_loop().time()
+                async with s.post(f"{WORKER}/exec",
+                                  json={"code": "hello", "timeout": 30},
+                                  headers=bearer(token)) as r:
+                    body = await r.json()
+                    assert r.status == 503, body
+                    assert "plugin not connected" in body["error"], body
+                # The point of the fix: an honest answer in about a second,
+                # not after the caller's full timeout.
+                assert asyncio.get_running_loop().time() - started < 10
+    run(go())
+
+
+def test_a_live_plugin_still_gets_its_full_timeout():
+    async def go():
+        async with aiohttp.ClientSession() as s:
+            token = await register(s, "slow-but-alive")
+            # Answers pings, drops the exec: alive, just slow. The probe must
+            # not cut this short — it has to run out its own timeout as a 504.
+            reply = lambda code: {"type": "__drop__"}
+            async with FakePlugin(s, token=token, reply=reply, pong=True):
+                async with s.post(f"{WORKER}/exec",
+                                  json={"code": "sleep", "timeout": 2},
+                                  headers=bearer(token)) as r:
+                    assert r.status == 504, await r.json()
+    run(go())
+
+
+def test_a_ghost_ui_frame_cannot_keep_the_slot_from_a_new_plugin():
+    """The bug this fix exists for.
+
+    An old (3.0) plugin answers pings from ui.html, so a closed plugin whose UI
+    outlived its sandbox still passes the probe: it holds the slot, swallows
+    every exec, and the real plugin reconnecting is turned away with 1008. One
+    failed exec has to be enough to let the next instance in.
+    """
+    async def go():
+        async with aiohttp.ClientSession() as s:
+            token = await register(s, "ghost")
+            drop = lambda code: {"type": "__drop__"}
+            async with FakePlugin(s, token=token, reply=drop, pong=True,
+                                  version="3.0"):
+                async with s.post(f"{WORKER}/exec",
+                                  json={"code": "hello", "timeout": 1},
+                                  headers=bearer(token)) as r:
+                    assert r.status == 504, await r.json()
+
+                # The real plugin comes back — and must be let in.
+                async with FakePlugin(s, token=token) as fresh:
+                    async with s.post(f"{WORKER}/exec", json={"code": "hello"},
+                                      headers=bearer(token)) as r:
+                        body = await r.json()
+                        assert r.status == 200 and body["value"] == 42, body
+                    assert fresh.seen_codes == ["hello"]
+    run(go())
+
+
+def test_a_healthy_plugin_keeps_its_slot_after_a_slow_exec():
+    """The other side of the same rule: one slow call must not cost the slot.
+
+    A 3.1 plugin pongs from code.js, so the probe already separates a ghost from
+    a working bridge. A timeout then means nothing worse than slow code, and a
+    second instance is still turned away.
+    """
+    async def go():
+        async with aiohttp.ClientSession() as s:
+            token = await register(s, "slowpoke")
+            drop = lambda code: {"type": "__drop__"}
+            async with FakePlugin(s, token=token, reply=drop, version="3.1"):
+                async with s.post(f"{WORKER}/exec",
+                                  json={"code": "slow", "timeout": 1},
+                                  headers=bearer(token)) as r:
+                    assert r.status == 504, await r.json()
+
+                ws = await s.ws_connect(ws_url(token))
+                msg = await asyncio.wait_for(ws.receive(), timeout=10)
+                assert "already connected" in json.loads(msg.data)["text"]
+                await asyncio.wait_for(ws.receive(), timeout=10)
+                assert ws.close_code == 1008
+    run(go())
+
+
+def test_a_busy_sandbox_is_not_mistaken_for_a_dead_one():
+    """The bug this fix exists for.
+
+    Figma's plugin sandbox is single-threaded, and from 3.1 on the pong is
+    produced by code.js — so while an exec runs, a ping cannot be answered
+    however healthy the bridge is. Racing that probe against the request killed
+    the socket of every call that held the sandbox longer than PROBE_MS, and
+    returned 503 for work that ran to completion and committed its edits. The
+    ack, sent before the work starts, is what the server waits for instead.
+    """
+    async def go():
+        async with aiohttp.ClientSession() as s:
+            token = await register(s, "busy-sandbox")
+            async with FakePlugin(s, token=token, caps=["deep-ping", "ack"],
+                                  work=3) as plugin:
+                async with s.post(f"{WORKER}/exec",
+                                  json={"code": "heavy", "timeout": 30},
+                                  headers=bearer(token)) as r:
+                    body = await r.json()
+                    assert r.status == 200, body
+                    assert body["value"] == 42, body
+                assert plugin.seen_codes == ["heavy"]
+    run(go())
+
+
+def test_a_busy_pre_ack_plugin_is_not_killed_either():
+    """A build without the ack cannot prove it is alive mid-exec.
+
+    It gets no probe at all then: a dead socket costs one timeout, which is far
+    cheaper than reporting every heavy build as failed when it in fact applied.
+    """
+    async def go():
+        async with aiohttp.ClientSession() as s:
+            token = await register(s, "busy-old")
+            async with FakePlugin(s, token=token, version="3.1", work=3):
+                async with s.post(f"{WORKER}/exec",
+                                  json={"code": "heavy", "timeout": 30},
+                                  headers=bearer(token)) as r:
+                    body = await r.json()
+                    assert r.status == 200 and body["value"] == 42, body
     run(go())
