@@ -6,12 +6,6 @@
 // messages flow back out. Persisted server/token config lives here too, since
 // clientStorage is only reachable from the main thread.
 
-// Shown in the plugin window title so a running build is identifiable at a
-// glance. Bump on every distributed build.
-const VERSION = "1.1";
-
-figma.showUI(__html__, { width: 240, height: 32, title: "Figmate Bridge v" + VERSION });
-
 const STORAGE_KEY = "figmate.config";
 
 // Responses above this size die at the worker's ~1MB cap with an opaque
@@ -949,3 +943,11 @@ figma.ui.onmessage = async (msg) => {
       // Unknown message — nothing to do.
   }
 };
+
+// The build stamp, shown in the window title so a running build is identifiable
+// at a glance. It lives in plugin/manifest.json and build-plugin.sh injects it
+// here; the literal below is only the fallback for running straight from the
+// repo. Opening the UI last keeps the version in one place, at the bottom.
+const BUILD_VERSION = "1.1.20260916";
+
+figma.showUI(__html__, { width: 240, height: 32, title: "Figmate Bridge v" + BUILD_VERSION });
