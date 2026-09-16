@@ -28,6 +28,5 @@
       "wss://figmate.example.com"
     ],
     "reasoning": "Talks to the Figmate bridge server (local, or the team's own server) that relays commands from the CLI."
-  },
-  "version": "1.1.20260916"
+  }
 }

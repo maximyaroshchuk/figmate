@@ -860,6 +860,7 @@ async function pushConfig() {
     type: "config",
     server: saved.server || "",
     token: saved.token || "",
+    version: BUILD_VERSION,
   });
 }
 
@@ -945,9 +946,9 @@ figma.ui.onmessage = async (msg) => {
 };
 
 // The build stamp, shown in the window title so a running build is identifiable
-// at a glance. It lives in plugin/manifest.json and build-plugin.sh injects it
-// here; the literal below is only the fallback for running straight from the
-// repo. Opening the UI last keeps the version in one place, at the bottom.
+// at a glance. This is the one place it lives — manifest.json cannot hold it,
+// Figma rejects any key it does not know — and pushConfig hands it to the UI so
+// the bridge announces the same number. build-plugin.sh rewrites it per build.
 const BUILD_VERSION = "1.1.20260916";
 
 figma.showUI(__html__, { width: 240, height: 32, title: "Figmate Bridge v" + BUILD_VERSION });

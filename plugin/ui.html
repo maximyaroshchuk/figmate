@@ -343,6 +343,7 @@ window.onmessage = (event) => {
 
   if (msg.type === "config") {
     config = { server: msg.server || "", token: msg.token || "" };
+    if (msg.version) PLUGIN_VERSION = String(msg.version);
     el("field_server").value = config.server;
     el("field_token").value = config.token;
     if (config.token) droppedBadToken = false;
@@ -422,9 +423,9 @@ el("copy_cli").onclick = (event) => {
   }
 };
 
-// Injected from plugin/manifest.json by build-plugin.sh; the literal below is
-// only the fallback for running the sources straight out of the repo.
-const PLUGIN_VERSION = "1.1.20260916";
+// The build stamp arrives with the config message — code.js owns it, so there
+// is no second copy here to fall out of step.
+let PLUGIN_VERSION = "0.0";
 
 // Protocol features this build implements:
 //   deep-ping — the pong comes from code.js, so it proves the sandbox is alive
