@@ -380,6 +380,18 @@ export class Slot {
     }
 
     this.ctx.acceptWebSocket(server, ["plugin"]);
+
+    // Cloudflare drops a WebSocket that has been idle for a couple of minutes,
+    // which is what made a plugin left open in Figma fall into "Reconnecting…"
+    // on its own. The plugin sends a keepalive; answering it from the runtime
+    // keeps the link warm without waking this object for every beat.
+    try {
+      this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(
+        JSON.stringify({ type: "keepalive" }),
+        JSON.stringify({ type: "keepalive-ack" }),
+      ));
+    } catch {}
+
     return new Response(null, { status: 101, webSocket: client });
   }
 

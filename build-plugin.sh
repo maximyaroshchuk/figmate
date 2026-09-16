@@ -20,7 +20,8 @@ grep -q "$INVITE" "$STAGE/plugin/ui.html" || { echo "invite injection failed" >&
 # One version for the build, stamped with the day it was cut. It cannot live in
 # manifest.json — Figma rejects any key it does not know — so code.js holds it
 # and hands it to the UI with the config message.
-export PLUGIN_VERSION="1.1.$(date +%Y%m%d)"
+# BUILD_NO counts builds cut on the same day; pass it when reshipping today.
+export PLUGIN_VERSION="1.1.$(date +%Y%m%d).${BUILD_NO:-1}"
 perl -pi -e 's{const BUILD_VERSION = "[^"]*";}{const BUILD_VERSION = "$ENV{PLUGIN_VERSION}";}' "$STAGE/plugin/code.js"
 
 grep -q "$PLUGIN_VERSION" "$STAGE/plugin/code.js" || { echo "version injection failed (code)" >&2; exit 1; }
