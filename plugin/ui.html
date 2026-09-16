@@ -222,6 +222,20 @@ const RETRY_MIN_MS = 1000;
 const RETRY_MAX_MS = 15000;
 let retryDelay = RETRY_MIN_MS;
 
+// Figma throttles a backgrounded plugin, and an idle socket can be dropped by
+// anything in between without a close frame. A quiet keepalive keeps the link
+// warm and surfaces a dead one as a real close, which the retry loop handles.
+const KEEPALIVE_MS = 25000;
+let keepaliveTimer = null;
+
+function startKeepalive() {
+  clearInterval(keepaliveTimer);
+  keepaliveTimer = setInterval(() => {
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    try { socket.send(JSON.stringify({ type: "keepalive" })); } catch (err) {}
+  }, KEEPALIVE_MS);
+}
+
 function retrySoon(delay) {
   const wait = delay || retryDelay;
   clearTimeout(retryTimer);
@@ -249,6 +263,7 @@ function connect() {
     setStatus("Connected", "ok");
     debug("[ws] connected");
     retryDelay = RETRY_MIN_MS;
+    startKeepalive();
     // The version is the build stamp, for humans and for the logs. What the
     // server gates protocol features on is the capability list: a date-stamped
     // version cannot be compared against "3.2", and naming the features outright
@@ -268,6 +283,11 @@ function connect() {
     switch (msg.type) {
       case "exec":
         debug("[exec] " + String(msg.id).slice(0, 8) + " code=" + (msg.code || "").length + "b");
+        // Confirm delivery before handing the job over. code.js sends its own
+        // ack, but a script that blocks the sandbox synchronously cannot get a
+        // message out at all — this one proves the bridge took the request, so
+        // such a call is left to run instead of being declared dead.
+        try { socket.send(JSON.stringify({ type: "recv", id: msg.id })); } catch (err) {}
         toPlugin({ type: "exec", id: msg.id, code: msg.code });
         break;
       case "ping":
@@ -340,6 +360,10 @@ function connect() {
 }
 
 function reconnect() {
+  // Several messages can find the socket shut in the same tick; without this
+  // each one tears down a connection the previous call just opened, and the
+  // status flickers between "Reconnecting…" and "Connected".
+  if (socket && socket.readyState === WebSocket.CONNECTING) return;
   clearTimeout(retryTimer);
   if (socket) {
     // Neuter the old socket so its onclose can't schedule a rival retry.

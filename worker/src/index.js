@@ -80,8 +80,9 @@ const DEEP_PING_VERSION = "3.1";
 // work that had actually been applied.
 const ACK_VERSION = "3.2";
 
-// How long the plugin may take to acknowledge an exec. It is posted before any
-// work, so this bounds a round trip plus one message-queue hop.
+// How long the plugin may take to acknowledge an exec. The UI frame confirms
+// delivery ("recv") and code.js confirms the sandbox started ("ack"); either
+// settles it, so this bounds a round trip plus one message-queue hop.
 const ACK_MS = 5000;
 
 // Per-socket state that has to survive hibernation, so it rides on the socket
@@ -555,7 +556,7 @@ export class Slot {
       });
       return;
     }
-    if (m.type === "ack") {
+    if (m.type === "ack" || m.type === "recv") {
       const waiter = this.ackWaiters.get(m.id);
       if (waiter) waiter();
       return;
